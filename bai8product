@@ -1,0 +1,103 @@
+package lab3;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+public class ProductCsvApp {
+	public static void main(String[] args) {
+        Path csvPath = Path.of("data", "products.csv");
+        Path reportPath = Path.of("data", "report.txt");
+
+        // 1. Tự động tạo thư mục data và file products.csv mẫu nếu chưa có
+        try {
+            if (Files.notExists(csvPath.getParent())) {
+                Files.createDirectories(csvPath.getParent());
+            }
+            if (Files.notExists(csvPath)) {
+                String sampleCsv = """
+                        ma,ten,donGia,soLuong
+                        SP01,Ban phim,350000,10
+                        SP02,Chuot khong day,250000,5
+                        SP03,Tai nghe,600000,3
+                        """;
+                Files.writeString(csvPath, sampleCsv, StandardCharsets.UTF_8);
+                System.out.println("Đã khởi tạo file CSV mẫu tại: " + csvPath.toAbsolutePath());
+            }
+        } catch (IOException e) {
+            System.err.println("Lỗi khởi tạo file CSV: " + e.getMessage());
+            return;
+        }
+
+        // 2. Đọc CSV -> Tạo Product -> In Console & Ghi report.txt
+        double totalValue = 0;
+        System.out.println("=== DANH SÁCH SẢN PHẨM ĐỌC TỪ FILE CSV ===");
+
+        try (BufferedReader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8);
+             BufferedWriter writer = Files.newBufferedWriter(reportPath, StandardCharsets.UTF_8)) {
+
+            // Ghi tiêu đề vào report.txt
+            writer.write("=== BÁO CÁO TỒN KHO SẢN PHẨM ===");
+            writer.newLine();
+
+            String line;
+            boolean isHeader = true;
+
+            while ((line = reader.readLine()) != null) {
+                // Bỏ qua dòng tiêu đề ma,ten,donGia,soLuong
+                if (isHeader) {
+                    isHeader = false;
+                    continue;
+                }
+
+                line = line.trim();
+                if (line.isEmpty()) continue;
+
+                // Tách cột theo dấu phẩy
+                String[] parts = line.split(",");
+                if (parts.length < 4) continue;
+
+                String code = parts[0].trim();
+                String name = parts[1].trim();
+                double unitPrice = Double.parseDouble(parts[2].trim());
+                int quantity = Integer.parseInt(parts[3].trim());
+
+                // Khởi tạo đối tượng Product
+                Product product = new Product(code, name, unitPrice, quantity);
+
+                // In ra màn hình Console
+                System.out.println(product);
+
+                // Ghi vào file report.txt
+                writer.write(product.toString());
+                writer.newLine();
+
+                // Cộng dồn tổng giá trị tồn kho
+                totalValue += product.inventoryValue();
+            }
+
+            // Ghi tổng kết
+            String summaryText = "TỔNG GIÁ TRỊ TỒN KHO: %,.0f VND".formatted(totalValue);
+            System.out.println("----------------------------------");
+            System.out.println(summaryText);
+
+            writer.write("----------------------------------");
+            writer.newLine();
+            writer.write(summaryText);
+            writer.newLine();
+
+            System.out.println("\nĐã xuất báo cáo thành công ra file: " + reportPath.toAbsolutePath());
+
+        } catch (IOException e) {
+            System.err.println("Lỗi thao tác I/O: " + e.getMessage());
+        } catch (NumberFormatException e) {
+            System.err.println("Lỗi định dạng số trong file CSV: " + e.getMessage());
+        } catch (IllegalArgumentException e) {
+            System.err.println("Lỗi dữ liệu sản phẩm: " + e.getMessage());
+        }
+    }
+}
+
+
