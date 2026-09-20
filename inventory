@@ -1,0 +1,220 @@
+package lab3;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Scanner;
+
+public class InventoryManager {
+	private static final Path CSV_PATH = Path.of("data", "inventory.csv");
+    private static final Path REPORT_PATH = Path.of("data", "inventory-report.txt");
+
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        List<Product> inputProducts = new ArrayList<>();
+
+        System.out.println("=== CHƯƠNG TRÌNH QUẢN LÝ TỒN KHO (INVENTORY MANAGER) ===");
+        System.out.print("Bạn muốn (1) Nhập từ bàn phím hay (2) Dùng bộ dữ liệu kiểm thử mẫu? [1/2]: ");
+        String choice = scanner.nextLine().trim();
+
+        if ("1".equals(choice)) {
+            inputProducts = inputProductsFromKeyboard(scanner);
+        } else {
+            System.out.println("\n--- Nạp bộ dữ liệu kiểm thử mẫu (3 sản phẩm hợp lệ) ---");
+            try {
+                inputProducts.add(new Product("SP01", "Bàn phím cơ", 1500000, 10));
+                inputProducts.add(new Product("SP02", "Chuột không dây", 500000, 25));
+                inputProducts.add(new Product("SP03", "Màn hình 27 inch", 4500000, 8));
+            } catch (IllegalArgumentException e) {
+                System.err.println("Lỗi dữ liệu mẫu: " + e.getMessage());
+            }
+        }
+
+        // 1. Lưu danh sách vào data/inventory.csv bằng UTF-8
+        saveToCsv(inputProducts, CSV_PATH);
+
+        // 2. Đọc lại tệp CSV và tái tạo danh sách đối tượng Product
+        System.out.println("\n=== 1. ĐỌC LẠI TỆP CSV VÀ TÁI TẠO DANH SÁCH PRODUCT ===");
+        List<Product> loadedProducts = loadFromCsv(CSV_PATH);
+
+        // 3. Hiển thị toàn bộ sản phẩm và tổng giá trị tồn kho
+        System.out.println("\n=== 2. DANH SÁCH SẢN PHẨM TRONG KHO ===");
+        double totalInventoryValue = 0;
+        for (Product p : loadedProducts) {
+            System.out.println(p);
+            totalInventoryValue += p.inventoryValue();
+        }
+        System.out.println("---------------------------------------------------------");
+        System.out.printf("TỔNG GIÁ TRỊ TỒN KHO: %,.0f VND%n", totalInventoryValue);
+
+        // 4. Tìm sản phẩm có giá trị tồn kho cao nhất
+        Product maxProduct = loadedProducts.stream()
+                .max(Comparator.comparingDouble(Product::inventoryValue))
+                .orElse(null);
+
+        if (maxProduct != null) {
+            System.out.println("\n=== 3. SẢN PHẨM CÓ GIÁ TRỊ TỒN KHO CAO NHẤT ===");
+            System.out.println(maxProduct);
+        }
+
+        // 5. Ghi báo cáo tổng hợp vào data/inventory-report.txt
+        writeReport(loadedProducts, totalInventoryValue, maxProduct, REPORT_PATH);
+    }
+
+    /**
+     * Nhập danh sách sản phẩm từ bàn phím với kiểm tra ràng buộc dữ liệu
+     */
+    private static List<Product> inputProductsFromKeyboard(Scanner scanner) {
+        List<Product> list = new ArrayList<>();
+        System.out.print("Nhập số lượng sản phẩm cần thêm: ");
+        int n = 0;
+        try {
+            n = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            System.out.println("Số lượng không hợp lệ. Mặc định nhập 1 sản phẩm.");
+            n = 1;
+        }
+
+        for (int i = 1; i <= n; i++) {
+            System.out.println("\n--- Nhập sản phẩm thứ " + i + " ---");
+            while (true) {
+                try {
+                    System.out.print("Mã sản phẩm: ");
+                    String code = scanner.nextLine();
+
+                    System.out.print("Tên sản phẩm: ");
+                    String name = scanner.nextLine();
+
+                    System.out.print("Đơn giá (VND): ");
+                    double price = Double.parseDouble(scanner.nextLine().trim());
+
+                    System.out.print("Số lượng: ");
+                    int qty = Integer.parseInt(scanner.nextLine().trim());
+
+                    Product p = new Product(code, name, price, qty);
+                    list.add(p);
+                    System.out.println("=> Thêm sản phẩm thành công!");
+                    break;
+                } catch (NumberFormatException e) {
+                    System.out.println("LỖI ĐỊNH DẠNG SỐ: Đơn giá hoặc số lượng phải là số! Vui lòng nhập lại.");
+                } catch (IllegalArgumentException e) {
+                    System.out.println("LỖI RÀNG BUỘC: " + e.getMessage() + "! Vui lòng nhập lại.");
+                }
+            }
+        }
+        return list;
+    }
+
+    /**
+     * Lưu danh sách sản phẩm ra tệp CSV bằng UTF-8 (try-with-resources)
+     */
+    public static void saveToCsv(List<Product> products, Path path) {
+        try {
+            if (path.getParent() != null && Files.notExists(path.getParent())) {
+                Files.createDirectories(path.getParent());
+            }
+        } catch (IOException e) {
+            System.err.println("Lỗi tạo thư mục: " + e.getMessage());
+        }
+
+        try (BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
+            writer.write("ma,ten,donGia,soLuong");
+            writer.newLine();
+            for (Product p : products) {
+                writer.write("%s,%s,%.2f,%d".formatted(p.getCode(), p.getName(), p.getUnitPrice(), p.getQuantity()));
+                writer.newLine();
+            }
+            System.out.println("\n=> Đã lưu danh sách vào " + path.toAbsolutePath() + " bằng UTF-8 thành công!");
+        } catch (IOException e) {
+            System.err.println("Lỗi khi ghi tệp CSV " + path + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Đọc tệp CSV và tái tạo danh sách đối tượng Product
+     */
+    public static List<Product> loadFromCsv(Path path) {
+        List<Product> list = new ArrayList<>();
+
+        if (Files.notExists(path)) {
+            System.err.println("LỖI TỆP: Không tìm thấy tệp " + path.toAbsolutePath());
+            return list;
+        }
+
+        try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            String header = reader.readLine(); // Bỏ qua tiêu đề
+            String line;
+            int lineNumber = 1;
+
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                if (line.isBlank()) continue;
+
+                String[] parts = line.split(",", -1);
+                if (parts.length != 4) {
+                    System.err.println("LỖI DỮ LIỆU: Bỏ qua dòng " + lineNumber + " do thiếu/thừa cột (có " + parts.length + " cột)");
+                    continue;
+                }
+
+                try {
+                    String code = parts[0].trim();
+                    String name = parts[1].trim();
+                    double price = Double.parseDouble(parts[2].trim());
+                    int qty = Integer.parseInt(parts[3].trim());
+
+                    Product p = new Product(code, name, price, qty);
+                    list.add(p);
+                } catch (NumberFormatException e) {
+                    System.err.println("LỖI ĐỊNH DẠNG SỐ: Dòng " + lineNumber + " chứa giá trị không hợp lệ (" + e.getMessage() + ")");
+                } catch (IllegalArgumentException e) {
+                    System.err.println("LỖI RÀNG BUỘC: Dòng " + lineNumber + " không hợp lệ: " + e.getMessage());
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("LỖI ĐỌC TỆP " + path + ": " + e.getMessage());
+        }
+
+        return list;
+    }
+
+    /**
+     * Ghi báo cáo tổng hợp vào inventory-report.txt
+     */
+    public static void writeReport(List<Product> products, double totalValue, Product maxProduct, Path path) {
+        try (BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
+            writer.write("=== BÁO CÁO TỔNG HỢP TỒN KHO ===");
+            writer.newLine();
+            writer.write("1. Tổng số lượng chủng loại sản phẩm: " + products.size());
+            writer.newLine();
+            writer.write("2. Tổng giá trị tồn kho: %,.0f VND".formatted(totalValue));
+            writer.newLine();
+            writer.write("3. Sản phẩm có giá trị tồn kho cao nhất:");
+            writer.newLine();
+            if (maxProduct != null) {
+                writer.write("   - Mã: " + maxProduct.getCode());
+                writer.newLine();
+                writer.write("   - Tên: " + maxProduct.getName());
+                writer.newLine();
+                writer.write("   - Đơn giá: %,.0f VND".formatted(maxProduct.getUnitPrice()));
+                writer.newLine();
+                writer.write("   - Số lượng: " + maxProduct.getQuantity());
+                writer.newLine();
+                writer.write("   - Giá trị tồn kho: %,.0f VND".formatted(maxProduct.inventoryValue()));
+                writer.newLine();
+            } else {
+                writer.write("   - Không có sản phẩm nào trong kho.");
+                writer.newLine();
+            }
+            writer.write("========================================");
+            writer.newLine();
+            System.out.println("\n=> Đã xuất báo cáo tổng hợp ra tệp " + path.toAbsolutePath() + " thành công!");
+        } catch (IOException e) {
+            System.err.println("Lỗi khi ghi tệp báo cáo " + path + ": " + e.getMessage());
+        }
+    }
+}
